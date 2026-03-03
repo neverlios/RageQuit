@@ -1,40 +1,139 @@
 package display
 
-/*
-#cgo CFLAGS: -fobjc-arc
-#cgo LDFLAGS: -framework Cocoa
-#include <stdlib.h>
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sync"
+)
 
-void initDisplay(void);
-void showImageOnAllScreens(const char *imagePath);
-void dismissImage(void);
-void runMainLoop(void);
-*/
-import "C"
-import "unsafe"
+// swiftSource is the Swift program that shows a fullscreen image and exits
+// when the user clicks or presses a key. It runs as a separate subprocess
+// to avoid conflicts between CGo/AppKit and the purego/IOKit sensor goroutine.
+const swiftSource = `import Cocoa
 
-// Init initializes NSApplication. Call once before Show or RunLoop.
-func Init() {
-	C.initDisplay()
+guard CommandLine.arguments.count > 1 else {
+    fputs("Usage: spankimg-display <image-path>\n", stderr)
+    exit(1)
 }
 
-// Show displays the image at imagePath fullscreen on all connected displays.
+let imagePath = CommandLine.arguments[1]
+guard let image = NSImage(contentsOfFile: imagePath) else {
+    fputs("spankimg: cannot load image: \(imagePath)\n", stderr)
+    exit(1)
+}
+
+class DismissView: NSView {
+    override var acceptsFirstResponder: Bool { true }
+    override func mouseDown(with event: NSEvent) { NSApp.terminate(nil) }
+    override func keyDown(with event: NSEvent) { NSApp.terminate(nil) }
+}
+
+class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminateAfterLastWindowClosed(_ app: NSApplication) -> Bool {
+        return true
+    }
+}
+
+let app = NSApplication.shared
+app.setActivationPolicy(.accessory)
+let delegate = AppDelegate()
+app.delegate = delegate
+
+for screen in NSScreen.screens {
+    let frame = screen.frame
+    let window = NSWindow(
+        contentRect: frame,
+        styleMask: .borderless,
+        backing: .buffered,
+        defer: false,
+        screen: screen
+    )
+    window.level = .screenSaver
+    window.backgroundColor = .black
+    window.isOpaque = true
+    window.hidesOnDeactivate = false
+    window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+
+    let contentView = DismissView(frame: NSRect(origin: .zero, size: frame.size))
+    let imageView = NSImageView(frame: contentView.bounds)
+    imageView.image = image
+    imageView.imageScaling = .scaleProportionallyUpOrDown
+    imageView.autoresizingMask = [.width, .height]
+    contentView.addSubview(imageView)
+
+    window.contentView = contentView
+    window.makeKeyAndOrderFront(nil)
+    window.makeFirstResponder(contentView)
+}
+
+app.activate(ignoringOtherApps: true)
+app.run()
+`
+
+var (
+	mu         sync.Mutex
+	currentCmd *exec.Cmd
+)
+
+// BinaryPath returns the path where the compiled display binary is cached.
+func BinaryPath() string {
+	home, _ := os.UserHomeDir()
+	dir := filepath.Join(home, ".cache", "spankimg")
+	os.MkdirAll(dir, 0755)
+	return filepath.Join(dir, "display")
+}
+
+// CompileIfNeeded compiles the embedded Swift display binary if it does not
+// already exist. This is a one-time operation (~10 seconds).
+func CompileIfNeeded() error {
+	binaryPath := BinaryPath()
+	if _, err := os.Stat(binaryPath); err == nil {
+		return nil
+	}
+
+	fmt.Println("spankimg: compiling display binary (first run only, ~10s)...")
+
+	srcPath := filepath.Join(os.TempDir(), "spankimg-display.swift")
+	if err := os.WriteFile(srcPath, []byte(swiftSource), 0644); err != nil {
+		return fmt.Errorf("writing swift source: %w", err)
+	}
+	defer os.Remove(srcPath)
+
+	cmd := exec.Command("swiftc", "-O", "-o", binaryPath, srcPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		os.Remove(binaryPath)
+		return fmt.Errorf("compiling display binary: %w", err)
+	}
+
+	fmt.Println("spankimg: display binary ready.")
+	return nil
+}
+
+// Show displays the image fullscreen on all connected displays.
+// Kills any previous display subprocess before showing the new one.
 // Safe to call from any goroutine.
 func Show(imagePath string) {
-	cs := C.CString(imagePath)
-	defer C.free(unsafe.Pointer(cs))
-	C.showImageOnAllScreens(cs)
-}
+	mu.Lock()
+	prev := currentCmd
+	currentCmd = nil
+	mu.Unlock()
 
-// Dismiss closes all currently displayed image windows.
-// Safe to call from any goroutine.
-func Dismiss() {
-	C.dismissImage()
-}
+	if prev != nil && prev.Process != nil {
+		prev.Process.Kill()
+		prev.Wait()
+	}
 
-// RunLoop starts the NSApp main run loop. This blocks forever.
-// Must be called from the main OS thread (i.e., from main() after
-// runtime.LockOSThread()).
-func RunLoop() {
-	C.runMainLoop()
+	cmd := exec.Command(BinaryPath(), imagePath)
+	if err := cmd.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "spankimg: failed to start display: %v\n", err)
+		return
+	}
+
+	mu.Lock()
+	currentCmd = cmd
+	mu.Unlock()
 }

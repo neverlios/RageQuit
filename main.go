@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
-	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -51,9 +52,6 @@ func findImage(dir string) (string, error) {
 }
 
 func main() {
-	// Lock main goroutine to the main OS thread — required for [NSApp run].
-	runtime.LockOSThread()
-
 	var imageDir string
 	var minAmplitude float64
 	var cooldownMs int
@@ -69,6 +67,11 @@ func main() {
 			fmt.Printf("spankimg: using image %s\n", imagePath)
 			fmt.Printf("spankimg: sensitivity %.2fg, cooldown %dms\n", minAmplitude, cooldownMs)
 
+			// Compile the Swift display binary on first run (one-time ~10s).
+			if err := display.CompileIfNeeded(); err != nil {
+				return fmt.Errorf("preparing display: %w", err)
+			}
+
 			// Create shared memory ring buffer for accelerometer data.
 			accelRing, err := shm.CreateRing("/spankimg-accel")
 			if err != nil {
@@ -79,10 +82,7 @@ func main() {
 
 			det := detector.New(minAmplitude, time.Duration(cooldownMs)*time.Millisecond)
 
-			display.Init()
-
-			// Sensor goroutine: reads from IOKit HID and writes to accelRing.
-			// sensor.Run() locks itself to an OS thread internally.
+			// Sensor goroutine: reads IOKit HID → writes to accelRing.
 			go func() {
 				if err := accelerometer.Run(accelerometer.Config{
 					AccelRing: accelRing,
@@ -91,7 +91,7 @@ func main() {
 				}
 			}()
 
-			// Detection goroutine: polls accelRing and triggers display.
+			// Detection goroutine: polls accelRing → spawns display subprocess.
 			go func() {
 				var lastTotal uint64
 				const maxBatch = 200
@@ -111,8 +111,11 @@ func main() {
 				}
 			}()
 
-			// RunLoop blocks forever on the main thread — must be last.
-			display.RunLoop()
+			// Block until Ctrl+C or SIGTERM.
+			sigCh := make(chan os.Signal, 1)
+			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+			<-sigCh
+			fmt.Println("\nspankimg: shutting down.")
 			return nil
 		},
 	}
