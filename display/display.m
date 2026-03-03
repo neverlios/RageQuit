@@ -2,6 +2,16 @@
 
 static NSMutableArray *imageWindows;
 
+// Delegate that keeps the app alive after all windows close.
+@interface SpankImgDelegate : NSObject <NSApplicationDelegate>
+@end
+
+@implementation SpankImgDelegate
+- (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {
+    return NO;
+}
+@end
+
 // Forward declaration so DismissView methods can call it
 void dismissImageOnMainThread(void);
 
@@ -17,6 +27,7 @@ void dismissImageOnMainThread(void);
 void initDisplay(void) {
     [NSApplication sharedApplication];
     [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
+    [NSApp setDelegate:[[SpankImgDelegate alloc] init]];
     imageWindows = [[NSMutableArray alloc] init];
 }
 
