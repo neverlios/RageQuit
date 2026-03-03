@@ -1,6 +1,7 @@
 #import <Cocoa/Cocoa.h>
 
 static NSMutableArray *imageWindows;
+static id globalMouseMonitor = nil;
 
 // Delegate that keeps the app alive after all windows close.
 @interface SpankImgDelegate : NSObject <NSApplicationDelegate>
@@ -15,6 +16,7 @@ static NSMutableArray *imageWindows;
 // Forward declaration so DismissView methods can call it
 void dismissImageOnMainThread(void);
 
+// DismissView handles local clicks and keypresses when our window is key.
 @interface DismissView : NSView
 @end
 
@@ -33,6 +35,11 @@ void initDisplay(void) {
 
 // Must be called from the main thread.
 void dismissImageOnMainThread(void) {
+    // Remove global monitor first so it doesn't fire during teardown.
+    if (globalMouseMonitor) {
+        [NSEvent removeMonitor:globalMouseMonitor];
+        globalMouseMonitor = nil;
+    }
     for (NSWindow *w in imageWindows) {
         [w close];
     }
@@ -52,11 +59,8 @@ void dismissImage(void) {
 void showImageOnAllScreens(const char *imagePath) {
     NSString *path = [NSString stringWithUTF8String:imagePath];
     dispatch_async(dispatch_get_main_queue(), ^{
-        // Close any currently shown windows
-        for (NSWindow *w in imageWindows) {
-            [w close];
-        }
-        [imageWindows removeAllObjects];
+        // Tear down any previous display.
+        dismissImageOnMainThread();
 
         NSImage *image = [[NSImage alloc] initWithContentsOfFile:path];
         if (!image) {
@@ -82,7 +86,6 @@ void showImageOnAllScreens(const char *imagePath) {
                 NSWindowCollectionBehaviorCanJoinAllSpaces |
                 NSWindowCollectionBehaviorFullScreenAuxiliary];
 
-            // DismissView handles click/keypress to close
             DismissView *contentView = [[DismissView alloc]
                 initWithFrame:NSMakeRect(0, 0, frame.size.width, frame.size.height)];
 
@@ -99,7 +102,18 @@ void showImageOnAllScreens(const char *imagePath) {
             [imageWindows addObject:window];
         }
 
-        [NSApp activateIgnoringOtherApps:YES];
+        // Global mouse monitor catches clicks even when our app is not the
+        // active app (avoids calling activateIgnoringOtherApps which conflicts
+        // with the IOKit HID sensor on another thread).
+        // Mouse monitors do not require Accessibility permissions.
+        globalMouseMonitor = [NSEvent
+            addGlobalMonitorForEventsMatchingMask:
+                NSEventMaskLeftMouseDown | NSEventMaskRightMouseDown
+            handler:^(NSEvent *event) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    dismissImageOnMainThread();
+                });
+            }];
     });
 }
 
