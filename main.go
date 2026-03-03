@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -17,20 +18,20 @@ import (
 	"spankimg/display"
 )
 
-// findImage returns the path to the first image file found in dir.
+// findImages returns all image files found in dir.
 // Supports ~/ prefix for the home directory.
-func findImage(dir string) (string, error) {
+func findImages(dir string) ([]string, error) {
 	if strings.HasPrefix(dir, "~/") {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return "", fmt.Errorf("getting home dir: %w", err)
+			return nil, fmt.Errorf("getting home dir: %w", err)
 		}
 		dir = filepath.Join(home, dir[2:])
 	}
 
-	var found string
+	var found []string
 	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err != nil || found != "" {
+		if err != nil {
 			return err
 		}
 		if d.IsDir() {
@@ -38,17 +39,27 @@ func findImage(dir string) (string, error) {
 		}
 		switch strings.ToLower(filepath.Ext(path)) {
 		case ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp":
-			found = path
+			found = append(found, path)
 		}
 		return nil
 	})
 	if err != nil {
-		return "", fmt.Errorf("scanning %s: %w", dir, err)
+		return nil, fmt.Errorf("scanning %s: %w", dir, err)
 	}
-	if found == "" {
-		return "", fmt.Errorf("no image found in %s", dir)
+	if len(found) == 0 {
+		return nil, fmt.Errorf("no images found in %s", dir)
 	}
 	return found, nil
+}
+
+// findImage returns the path to the first image file found in dir.
+// Supports ~/ prefix for the home directory.
+func findImage(dir string) (string, error) {
+	images, err := findImages(dir)
+	if err != nil {
+		return "", err
+	}
+	return images[0], nil
 }
 
 func main() {
@@ -60,11 +71,11 @@ func main() {
 		Use:   "spankimg",
 		Short: "Show image on all displays when your Mac is spanked",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			imagePath, err := findImage(imageDir)
+			images, err := findImages(imageDir)
 			if err != nil {
-				return fmt.Errorf("finding image: %w", err)
+				return fmt.Errorf("finding images: %w", err)
 			}
-			fmt.Printf("spankimg: using image %s\n", imagePath)
+			fmt.Printf("spankimg: found %d image(s) in %s\n", len(images), imageDir)
 			fmt.Printf("spankimg: sensitivity %.2fg, cooldown %dms\n", minAmplitude, cooldownMs)
 
 			// Compile the Swift display binary on first run (one-time ~10s).
@@ -103,8 +114,9 @@ func main() {
 					}
 					for _, s := range samples {
 						if det.Check(s.X, s.Y, s.Z) {
-							fmt.Println("spankimg: impact detected!")
-							display.Show(imagePath)
+							pick := images[rand.Intn(len(images))]
+							fmt.Printf("spankimg: impact! showing %s\n", filepath.Base(pick))
+							display.Show(pick)
 						}
 					}
 					time.Sleep(10 * time.Millisecond)
@@ -121,7 +133,7 @@ func main() {
 	}
 
 	cmd.Flags().StringVarP(&imageDir, "image-dir", "i", "~/spankimg/", "Directory containing the image to display")
-	cmd.Flags().Float64VarP(&minAmplitude, "min-amplitude", "a", 0.3, "Impact threshold in g-force deviation from 1g")
+	cmd.Flags().Float64VarP(&minAmplitude, "min-amplitude", "a", 0.6, "Impact threshold in g-force deviation from 1g")
 	cmd.Flags().IntVarP(&cooldownMs, "cooldown", "c", 750, "Milliseconds before the image can be triggered again")
 
 	if err := cmd.Execute(); err != nil {
