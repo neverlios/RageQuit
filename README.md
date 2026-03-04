@@ -58,7 +58,7 @@ RageQuit: sensitivity 0.60g, cooldown 750ms
 RageQuit: display binary ready.
 ```
 
-Spank your Mac → random image appears fullscreen on all displays → click or press any key to dismiss → repeat.
+Hit your Table/Mac → random image appears fullscreen on all displays → click or press ESC key to dismiss → repeat.
 
 ### Options
 
