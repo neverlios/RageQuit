@@ -14,13 +14,13 @@ import (
 const swiftSource = `import Cocoa
 
 guard CommandLine.arguments.count > 1 else {
-    fputs("Usage: spankimg-display <image-path>\n", stderr)
+    fputs("Usage: ragequit-display <image-path>\n", stderr)
     exit(1)
 }
 
 let imagePath = CommandLine.arguments[1]
 guard let image = NSImage(contentsOfFile: imagePath) else {
-    fputs("spankimg: cannot load image: \(imagePath)\n", stderr)
+    fputs("ragequit: cannot load image: \(imagePath)\n", stderr)
     exit(1)
 }
 
@@ -80,7 +80,7 @@ var (
 // BinaryPath returns the path where the compiled display binary is cached.
 func BinaryPath() string {
 	home, _ := os.UserHomeDir()
-	dir := filepath.Join(home, ".cache", "spankimg")
+	dir := filepath.Join(home, ".cache", "RageQuit")
 	os.MkdirAll(dir, 0755)
 	return filepath.Join(dir, "display")
 }
@@ -93,9 +93,9 @@ func CompileIfNeeded() error {
 		return nil
 	}
 
-	fmt.Println("spankimg: compiling display binary (first run only, ~10s)...")
+	fmt.Println("ragequit: compiling display binary (first run only, ~10s)...")
 
-	srcPath := filepath.Join(os.TempDir(), "spankimg-display.swift")
+	srcPath := filepath.Join(os.TempDir(), "ragequit-display.swift")
 	if err := os.WriteFile(srcPath, []byte(swiftSource), 0644); err != nil {
 		return fmt.Errorf("writing swift source: %w", err)
 	}
@@ -109,7 +109,7 @@ func CompileIfNeeded() error {
 		return fmt.Errorf("compiling display binary: %w", err)
 	}
 
-	fmt.Println("spankimg: display binary ready.")
+	fmt.Println("ragequit: display binary ready.")
 	return nil
 }
 
@@ -129,7 +129,7 @@ func Show(imagePath string) {
 
 	cmd := exec.Command(BinaryPath(), imagePath)
 	if err := cmd.Start(); err != nil {
-		fmt.Fprintf(os.Stderr, "spankimg: failed to start display: %v\n", err)
+		fmt.Fprintf(os.Stderr, "ragequit: failed to start display: %v\n", err)
 		return
 	}
 

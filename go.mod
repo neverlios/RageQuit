@@ -1,4 +1,4 @@
-module spankimg
+module ragequit
 
 go 1.26
 

@@ -58,6 +58,6 @@ func TestFindImage_ignoresNonImageFiles(t *testing.T) {
 
 func TestFindImage_expandsTilde(t *testing.T) {
 	// Verify it doesn't panic on a tilde path
-	_, _ = findImage("~/nonexistent-spankimg-test-dir-xyz")
+	_, _ = findImage("~/nonexistent-RageQuit-test-dir-xyz")
 	// No panic = pass
 }

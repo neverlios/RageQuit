@@ -14,8 +14,8 @@ import (
 	"github.com/spf13/cobra"
 	accelerometer "github.com/taigrr/apple-silicon-accelerometer/sensor"
 	"github.com/taigrr/apple-silicon-accelerometer/shm"
-	"spankimg/detector"
-	"spankimg/display"
+	"ragequit/detector"
+	"ragequit/display"
 )
 
 // findImages returns all image files found in dir.
@@ -68,15 +68,15 @@ func main() {
 	var cooldownMs int
 
 	cmd := &cobra.Command{
-		Use:   "spankimg",
+		Use:   "ragequit",
 		Short: "Show image on all displays when your Mac is spanked",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			images, err := findImages(imageDir)
 			if err != nil {
 				return fmt.Errorf("finding images: %w", err)
 			}
-			fmt.Printf("spankimg: found %d image(s) in %s\n", len(images), imageDir)
-			fmt.Printf("spankimg: sensitivity %.2fg, cooldown %dms\n", minAmplitude, cooldownMs)
+			fmt.Printf("ragequit: found %d image(s) in %s\n", len(images), imageDir)
+			fmt.Printf("ragequit: sensitivity %.2fg, cooldown %dms\n", minAmplitude, cooldownMs)
 
 			// Compile the Swift display binary on first run (one-time ~10s).
 			if err := display.CompileIfNeeded(); err != nil {
@@ -84,7 +84,7 @@ func main() {
 			}
 
 			// Create shared memory ring buffer for accelerometer data.
-			accelRing, err := shm.CreateRing("/spankimg-accel")
+			accelRing, err := shm.CreateRing("/ragequit-accel")
 			if err != nil {
 				return fmt.Errorf("creating accel ring: %w", err)
 			}
@@ -115,7 +115,7 @@ func main() {
 					for _, s := range samples {
 						if det.Check(s.X, s.Y, s.Z) {
 							pick := images[rand.Intn(len(images))]
-							fmt.Printf("spankimg: impact! showing %s\n", filepath.Base(pick))
+							fmt.Printf("ragequit: impact! showing %s\n", filepath.Base(pick))
 							display.Show(pick)
 						}
 					}
@@ -127,12 +127,12 @@ func main() {
 			sigCh := make(chan os.Signal, 1)
 			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 			<-sigCh
-			fmt.Println("\nspankimg: shutting down.")
+			fmt.Println("\nRageQuit: shutting down.")
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVarP(&imageDir, "image-dir", "i", "~/spankimg/", "Directory containing the image to display")
+	cmd.Flags().StringVarP(&imageDir, "image-dir", "i", "~/RageQuitImgs/", "Directory containing the image to display")
 	cmd.Flags().Float64VarP(&minAmplitude, "min-amplitude", "a", 0.6, "Impact threshold in g-force deviation from 1g")
 	cmd.Flags().IntVarP(&cooldownMs, "cooldown", "c", 750, "Milliseconds before the image can be triggered again")
 
