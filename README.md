@@ -40,7 +40,7 @@ On first run the display binary (~Swift) is compiled and cached to `~/.cache/rag
 Put one or more images in `~/RageQuitImgs/`:
 
 ```bash
-mkdir -p ~/RageQuit
+mkdir -p ~/RageQuitImgs
 cp ~/Downloads/yourimage.jpg ~/RageQuitImgs/
 ```
 

@@ -42,21 +42,25 @@ let delegate = AppDelegate()
 app.delegate = delegate
 
 for screen in NSScreen.screens {
-    let frame = screen.frame
+    let globalFrame = screen.frame
+    // contentRect must be in the screen's LOCAL coordinate system (origin at zero).
+    // After creation, setFrame positions the window in global screen coordinates.
+    let localFrame = NSRect(origin: .zero, size: globalFrame.size)
     let window = NSWindow(
-        contentRect: frame,
+        contentRect: localFrame,
         styleMask: .borderless,
         backing: .buffered,
         defer: false,
         screen: screen
     )
+    window.setFrame(globalFrame, display: false)
     window.level = .screenSaver
     window.backgroundColor = .black
     window.isOpaque = true
     window.hidesOnDeactivate = false
     window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
-    let contentView = DismissView(frame: NSRect(origin: .zero, size: frame.size))
+    let contentView = DismissView(frame: NSRect(origin: .zero, size: globalFrame.size))
     let imageView = NSImageView(frame: contentView.bounds)
     imageView.image = image
     imageView.imageScaling = .scaleProportionallyUpOrDown
