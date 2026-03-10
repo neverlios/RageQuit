@@ -48,17 +48,35 @@ Supported formats: `.jpg` `.jpeg` `.png` `.gif` `.bmp` `.tiff` `.webp`
 
 ## Usage
 
+### Running in foreground
+
 ```bash
-sudo ./RageQuit
+sudo ./ragequit run
 ```
 
 ```
-RageQuit: found 3 image(s) in ~/RageQuitImgs/
-RageQuit: sensitivity 0.60g, cooldown 750ms
-RageQuit: display binary ready.
+ragequit: found 3 image(s) in ~/RageQuitImgs/
+ragequit: sensitivity 0.60g, cooldown 750ms
 ```
 
 Hit your Table/Mac → random image appears fullscreen on all displays → click or press ESC key to dismiss → repeat.
+
+Press `Ctrl+C` to quit.
+
+### Running as a daemon (background)
+
+```bash
+# Start daemon
+sudo ./ragequit start
+
+# Check status
+sudo ./ragequit status
+
+# Stop daemon
+sudo ./ragequit stop
+```
+
+Daemon logs are written to `~/.cache/RageQuit/ragequit.log`.
 
 ### Options
 
@@ -70,27 +88,28 @@ Hit your Table/Mac → random image appears fullscreen on all displays → click
 
 ```bash
 # More sensitive (light tap triggers it)
-sudo ./RageQuit --min-amplitude 0.3
+sudo ./ragequit run --min-amplitude 0.3
 
 # Less sensitive (requires a hard hit)
-sudo ./RageQuit --min-amplitude 0.9
+sudo ./ragequit run --min-amplitude 0.9
 
 # Custom image folder
-sudo ./RageQuit --image-dir ~/Pictures/reactions/
+sudo ./ragequit start --image-dir ~/Pictures/reactions/
 ```
-
-Press `Ctrl+C` to quit.
 
 ## Architecture
 
 ```
-RageQuit (Go, no CGo)
-├── sensor goroutine   — IOKit HID via purego → reads accelerometer
+ragequit (Go, no CGo)
+├── daemon management   — start/stop/status commands, PID file in ~/.cache/RageQuit/
+├── sensor goroutine    — IOKit HID via purego → reads accelerometer
 ├── detection goroutine — threshold + cooldown → triggers display
 └── display subprocess  — compiled Swift binary → fullscreen NSWindow on all NSScreens
 ```
 
 The sensor and display are deliberately in **separate processes**: the accelerometer uses [purego](https://github.com/ebitengine/purego) for CGo-free IOKit access, which conflicts with AppKit's CGo bindings if they share a process. The Swift display binary is compiled once and cached.
+
+Daemon mode runs the process in the background with logs written to `~/.cache/RageQuit/ragequit.log`.
 
 ## Troubleshooting
 
@@ -101,6 +120,17 @@ The sensor and display are deliberately in **separate processes**: the accelerom
 **Stale display binary** — delete and let it recompile:
 ```bash
 rm ~/.cache/ragequit/display
+```
+
+**Daemon issues** — check the log file and PID file:
+```bash
+cat ~/.cache/RageQuit/ragequit.log
+cat ~/.cache/RageQuit/ragequit.pid
+```
+
+**Stale PID file** — if the daemon crashed without cleanup:
+```bash
+rm ~/.cache/RageQuit/ragequit.pid
 ```
 
 **Shared memory conflict** — if a previous run crashed without cleanup:
